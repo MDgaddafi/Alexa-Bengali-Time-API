@@ -1,0 +1,16 @@
+{
+  "name": "alexa-bengali-time",
+  "version": "1.0.0",
+  "description": "Alexa Routine backend API for announcing Bangladesh time in conversational native Bengali",
+  "main": "api/index.js",
+  "scripts": {
+    "start": "node api/index.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "google-tts-api": "^2.0.2"
+  },
+  "engines": {
+    "node": ">=18.x"
+  }
+}
