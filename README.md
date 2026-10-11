@@ -128,18 +128,20 @@ There are two easy methods to connect this to your Echo Dot:
    - Set to `bangla time` or `bengali time`
 4. In the Left Menu, go to **Endpoint**:
    - Select **HTTPS**
-   - In **Default Region**, paste your Vercel URL:
-     `https://your-project.vercel.app/api`
-   - In the SSL dropdown, select:
-     `My development endpoint is a sub-domain of a domain that has a wildcard certificate from a certificate authority`
+   - In **Default Region**, paste your Vercel URL: `https://your-project.vercel.app/api`
+   - In the SSL dropdown, select: `My development endpoint is a sub-domain of a domain that has a wildcard certificate from a certificate authority`
    - Click **Save Endpoints**.
-5. Click **Build Model** at the top.
+5. Click **Build Model** at the top. *(Also go to **Test** tab -> change "Test is disabled for this skill" to **Development**)*.
 6. Open the **Amazon Alexa App** on your phone:
-   - Go to **More** -> **Routines** -> Tap **+**.
-   - **When this happens**: Tap **Schedule** -> **At Time** -> Select your desired time (e.g., 6:00 AM, repeat daily).
-   - **Add action**: Tap **Skills** -> **Your Skills** -> Select **Bangla Time**.
-   - **From (Device)**: Select your **Echo Dot**.
-   - Tap **Save**.
+   - Go to **More** ➔ **Routines** ➔ Tap **+** (Add Routine).
+   - রুটিনের নাম দিন (যেমন: `Bangla Time 6 AM`)।
+   - **When this happens**: Tap **Schedule** ➔ **At Time** ➔ সময় সিলেক্ট করুন (যেমন: `6:00 AM`, Repeat: Daily)।
+   - **Add action**:
+     - তালিকার একদম উপরে থাকা **Custom** অপশনে ট্যাপ করুন *(যেখানে লেখা থাকে: "Alexa will: Custom" / "Type what you would say to Alexa")*।
+     - টেক্সট বক্সে টাইপ করুন: `open bangla time`
+     - **Next** চাপুন।
+   - **Hear Alexa from (Device)**: আপনার **Echo Dot** সিলেক্ট করুন।
+   - **Save** করে দিন।
 7. Create routines for every 30-minute interval (6:00 AM to 10:00 PM), or as needed.
 
 ---
