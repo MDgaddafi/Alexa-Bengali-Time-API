@@ -17,7 +17,33 @@ app.use((req, res, next) => {
   next();
 });
 
-// Serve audio directory statically with proper audio/mpeg headers
+// Dynamic live minute generator: concatenates hour phrase + minute phrase
+app.get('/audio/live-:h-:m.mp3', (req, res) => {
+  try {
+    const h = parseInt(req.params.h, 10);
+    const m = parseInt(req.params.m, 10);
+    const hPath = path.join(process.cwd(), 'public', 'audio', 'hours', `h${h}.mp3`);
+    const mPath = path.join(process.cwd(), 'public', 'audio', 'minutes', `m${m}.mp3`);
+
+    if (fs.existsSync(hPath) && fs.existsSync(mPath)) {
+      const hBuf = fs.readFileSync(hPath);
+      const mBuf = fs.readFileSync(mPath);
+      const combined = Buffer.concat([hBuf, mBuf]);
+
+      res.setHeader('Content-Type', 'audio/mpeg');
+      res.setHeader('Content-Length', combined.length);
+      res.setHeader('Accept-Ranges', 'bytes');
+      res.setHeader('Cache-Control', 'public, max-age=86400');
+      return res.end(combined);
+    }
+    return res.status(404).json({ error: 'Audio segment not found' });
+  } catch (err) {
+    console.error('Error combining audio:', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Serve pre-rendered audio files statically
 app.get('/audio/:filename', (req, res) => {
   const filename = req.params.filename;
   const filePath = path.join(process.cwd(), 'public', 'audio', filename);
@@ -42,7 +68,9 @@ function toBengaliNumber(num) {
 }
 
 function getBengaliPeriod(hour24) {
-  if (hour24 >= 5 && hour24 < 12) {
+  if (hour24 >= 4 && hour24 < 6) {
+    return 'ভোর';
+  } else if (hour24 >= 6 && hour24 < 12) {
     return 'সকাল';
   } else if (hour24 >= 12 && hour24 < 16) {
     return 'দুপুর';
@@ -78,33 +106,28 @@ function getBangladeshTime(customDate = null) {
   return { hour24, minute, second };
 }
 
-function getSlotKeyAndText(hour24, minute) {
-  let targetHour = hour24;
-  let targetMinute = 0;
-
-  // Round minute to nearest 30-minute interval
-  if (minute >= 15 && minute < 45) {
-    targetMinute = 30;
-  } else if (minute >= 45) {
-    targetHour = (targetHour + 1) % 24;
-    targetMinute = 0;
-  } else {
-    targetMinute = 0;
-  }
-
-  // Restrict to project boundary (06:00 to 22:00) with safe fallback
-  if (targetHour < 6) targetHour = 6;
-  if (targetHour > 22) targetHour = 22;
-
-  const key = `${String(targetHour).padStart(2, '0')}-${targetMinute === 0 ? '00' : '30'}`;
-
-  // Bengali grammar rules
-  const period = getBengaliPeriod(targetHour);
-  const hour12 = targetHour % 12 === 0 ? 12 : targetHour % 12;
+function getDynamicTimeData(hour24, minute) {
+  const period = getBengaliPeriod(hour24);
+  const hour12 = hour24 % 12 === 0 ? 12 : hour24 % 12;
   const bnHour = toBengaliNumber(hour12);
+  const bnMinute = toBengaliNumber(minute);
 
   let text = '';
-  if (targetMinute === 30) {
+  let audioPath = '';
+
+  // 1. Exact 00 minute mark
+  if (minute === 0) {
+    text = `এখন ${period} ${bnHour}টা বাজে`;
+    const slotKey = `${String(hour24).padStart(2, '0')}-00`;
+    // If we have pre-rendered file (6:00 to 22:00)
+    if (hour24 >= 6 && hour24 <= 22) {
+      audioPath = `/audio/${slotKey}.mp3`;
+    } else {
+      audioPath = `/audio/hours/h${hour24}.mp3`;
+    }
+  }
+  // 2. Exact 30 minute mark (with special 1:30 and 2:30 exceptions)
+  else if (minute === 30) {
     if (hour12 === 1) {
       text = `এখন ${period} দেড়টা বাজে`;
     } else if (hour12 === 2) {
@@ -112,18 +135,28 @@ function getSlotKeyAndText(hour24, minute) {
     } else {
       text = `এখন ${period} সাড়ে ${bnHour}টা বাজে`;
     }
-  } else {
-    text = `এখন ${period} ${bnHour}টা বাজে`;
+
+    const slotKey = `${String(hour24).padStart(2, '0')}-30`;
+    if (hour24 >= 6 && hour24 <= 22) {
+      audioPath = `/audio/${slotKey}.mp3`;
+    } else {
+      audioPath = `/audio/live-${hour24}-30.mp3`;
+    }
+  }
+  // 3. Any other dynamic minute (8:32, 8:33, 11:47, 24/7)
+  else {
+    text = `এখন ${period} ${bnHour}টা ${bnMinute} মিনিট বাজে`;
+    audioPath = `/audio/live-${hour24}-${minute}.mp3`;
   }
 
-  return { key, text, targetHour, targetMinute };
+  return { text, audioPath };
 }
 
 async function handleTimeRequest(req, res) {
   try {
     let { hour24, minute } = getBangladeshTime();
 
-    // Query parameter testing (e.g. ?time=13:30 or ?h=14&m=30)
+    // Query parameter testing (e.g. ?time=08:35 or ?h=14&m=32)
     if (req.query.time) {
       const [h, m] = req.query.time.split(':').map((v) => parseInt(v, 10));
       if (!isNaN(h) && !isNaN(m)) {
@@ -139,19 +172,19 @@ async function handleTimeRequest(req, res) {
       }
     }
 
-    const { key, text, targetHour, targetMinute } = getSlotKeyAndText(hour24, minute);
+    const { text, audioPath } = getDynamicTimeData(hour24, minute);
 
     // Host domain: use Vercel URL
     const host = req.headers.host || 'alexa-bengali-time-api.vercel.app';
     const protocol = req.headers['x-forwarded-proto'] || 'https';
-    const audioUrl = `${protocol}://${host}/audio/test-live.mp3`;
+    const fullAudioUrl = `${protocol}://${host}${audioPath}`;
 
     // Alexa-compliant SSML
-    const ssml = `<speak><audio src="${audioUrl}" /></speak>`;
+    const ssml = `<speak><audio src="${fullAudioUrl}" /></speak>`;
 
-    const hour12 = targetHour % 12 === 0 ? 12 : targetHour % 12;
-    const ampm = targetHour >= 12 ? 'PM' : 'AM';
-    const formattedTime = `${String(hour12).padStart(2, '0')}:${String(targetMinute).padStart(2, '0')} ${ampm}`;
+    const hour12 = hour24 % 12 === 0 ? 12 : hour24 % 12;
+    const ampm = hour24 >= 12 ? 'PM' : 'AM';
+    const formattedTime = `${String(hour12).padStart(2, '0')}:${String(minute).padStart(2, '0')} ${ampm}`;
 
     // Standard Alexa Skills Kit JSON format
     const responsePayload = {
@@ -163,12 +196,12 @@ async function handleTimeRequest(req, res) {
         },
         shouldEndSession: true
       },
-      // Extra metadata for debugging
+      // Debugging metadata
       success: true,
       timezone: 'Asia/Dhaka (GMT+6)',
       currentTime: formattedTime,
       bengaliText: text,
-      audioUrl: audioUrl
+      audioUrl: fullAudioUrl
     };
 
     return res.status(200).json(responsePayload);
