@@ -144,7 +144,7 @@ async function handleTimeRequest(req, res) {
     // Host domain: use Vercel URL
     const host = req.headers.host || 'alexa-bengali-time-api.vercel.app';
     const protocol = req.headers['x-forwarded-proto'] || 'https';
-    const audioUrl = `${protocol}://${host}/audio/${key}.mp3`;
+    const audioUrl = `${protocol}://${host}/audio/test-live.mp3`;
 
     // Alexa-compliant SSML
     const ssml = `<speak><audio src="${audioUrl}" /></speak>`;
