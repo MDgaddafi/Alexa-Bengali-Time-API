@@ -1,9 +1,13 @@
-$ffmpeg = "C:\Users\Astrum It\AppData\Local\Microsoft\WinGet\Packages\Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe\ffmpeg-9.0.2-full_build\bin\ffmpeg.exe"
+﻿$OutputEncoding = [System.Text.Encoding]::UTF8
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
-$audioDir = "c:\Users\Astrum It\Documents\Ai all project\Alexa\public\audio"
-if (!(Test-Path $audioDir)) {
-    New-Item -ItemType Directory -Path $audioDir -Force | Out-Null
+function Get-Utf8UrlEncode($str) {
+    $bytes = [System.Text.Encoding]::UTF8.GetBytes($str)
+    return ($bytes | ForEach-Object { "%{0:X2}" -f $_ }) -join ""
 }
+
+$ffmpeg = "C:\Users\Astrum It\AppData\Local\Microsoft\WinGet\Packages\Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe\ffmpeg-9.0.2-full_build\bin\ffmpeg.exe"
+$audioDir = "c:\Users\Astrum It\Documents\Ai all project\Alexa\public\audio"
 
 $timeSlots = @(
     @{ Key = "06-00"; Text = "এখন সকাল ৬টা বাজে" },
@@ -41,22 +45,14 @@ $timeSlots = @(
     @{ Key = "22-00"; Text = "এখন রাত ১০টা বাজে" }
 )
 
-Write-Host "Generating $($timeSlots.Count) audio files for Alexa SSML..."
-
 foreach ($slot in $timeSlots) {
-    $encodedText = [System.Uri]::EscapeDataString($slot.Text)
-    $ttsUrl = "https://translate.google.com/translate_tts?ie=UTF-8&q=$encodedText&tl=bn&total=1&idx=0&client=tw-ob"
-    
+    $encoded = Get-Utf8UrlEncode $slot.Text
+    $url = "https://translate.google.com/translate_tts?ie=UTF-8&q=$encoded&tl=bn&total=1&idx=0&client=tw-ob"
     $tempFile = "$audioDir\temp.mp3"
     $targetFile = "$audioDir\$($slot.Key).mp3"
     
-    Write-Host "Processing $($slot.Key): $($slot.Text)..."
-    Invoke-WebRequest -Uri $ttsUrl -OutFile $tempFile -UserAgent "Mozilla/5.0"
-    
-    # Convert to Alexa-compliant format: 48kbps, 24000Hz, Mono MP3
+    Invoke-WebRequest -Uri $url -OutFile $tempFile -UserAgent "Mozilla/5.0"
     & $ffmpeg -y -i $tempFile -ac 1 -ar 24000 -b:a 48k $targetFile 2>$null
-    
     Remove-Item $tempFile -ErrorAction SilentlyContinue
+    Write-Host "Generated $($slot.Key): $($slot.Text)"
 }
-
-Write-Host "All audio files successfully generated in $audioDir!"
